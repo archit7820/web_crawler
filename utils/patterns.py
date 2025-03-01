@@ -11,7 +11,7 @@ PATTERNS = {
     "in.urbanic.com": re.compile(r"/details/[\w-]+-\d+"),
     "www.savana.com": re.compile(r"/details/[\w-]+-\d+"),
     "www.bewakoof.com": re.compile(r"/p/[\w-]+"),
-    "www.nike.com": re.compile(r"/t/[\w-]+-[\w\d]+/[\w\d-]+"),
+    "www.nike.com": re.compile(r"/in/t/[\w-]+-[\w\d]+/[\w\d-]+"),
     "forever21.abfrl.in": re.compile(r"/p/[\w-]+-\d+\.html"),
     "in.puma.com": re.compile(r"/pd/[\w-]+/\d+"),
     "aeo.abfrl.in": re.compile(r"/p/[\w-]+-\d+\.html"),
