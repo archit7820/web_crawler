@@ -1,6 +1,6 @@
 import asyncio
 import os
-from typing import List
+from typing import List, Set, Tuple
 import aiohttp
 import sys
 from urllib.parse import urlparse
@@ -9,6 +9,7 @@ from services.parser import extract_links, is_product_url
 from utils.file_handler import save_to_json
 from config.settings import get_settings
 from services.selenium_fetcher import fetch_links_with_selenium
+#from services.selenium_fetcher import fetch_links_with_persistent_selenium as fetch_links_with_selenium
 
 # Set event loop policy for Windows to avoid socket errors
 if sys.platform.startswith("win"):
@@ -16,11 +17,9 @@ if sys.platform.startswith("win"):
 
 settings = get_settings()
 
-# Define output directory and file
+# Define output directory and files
 OUTPUT_DIR = settings.OUTPUT_DIR
-if not os.path.exists(OUTPUT_DIR):
-    os.makedirs(OUTPUT_DIR)
-OUTPUT_FILE = os.path.join(OUTPUT_DIR, "products.json")
+os.makedirs(OUTPUT_DIR, exist_ok=True)  # Create output directory if it doesn't exist
 FINAL_FILE = os.path.join(OUTPUT_DIR, "final_products.json")
 EXTRACTED_FILE = os.path.join(OUTPUT_DIR, "extracted_links.json")
 
@@ -76,27 +75,32 @@ async def crawl_domain(session: aiohttp.ClientSession, start_url: str, max_depth
     
     return list(product_urls)
 
-async def fetch_and_process(session: aiohttp.ClientSession, url: str, semaphore: asyncio.Semaphore, base_domain: str):
+async def fetch_and_process(session: aiohttp.ClientSession, url: str, semaphore: asyncio.Semaphore, base_domain: str) -> Tuple[Set[str], Set[str]]:
+    """
+    Fetches a URL using a retry mechanism, extracts links via the standard parser,
+    and falls back to Selenium if necessary.
+    Returns a tuple of (new internal links, product URLs found).
+    """
     async with semaphore:
         print(f"[DEBUG] Fetching URL: {url}")
-        # Use retry mechanism when fetching the URL
-        html = await retry_fetch(session, url, max_retries=3, initial_backoff=1.0)
+        html = await retry_fetch(session, url)
         if not html:
             print(f"[DEBUG] No HTML content retrieved from: {url}")
             return (set(), set())
         
-        # First attempt: extract links using the standard parser
+        # Attempt extraction using the standard parser
         links = extract_links(html, url)
         print(f"[DEBUG] Extracted links (aiohttp): {links}")
         
-        # Fallback: if no links were found, use Selenium (headless) to extract links
+        # Fallback: if no links were found, use the persistent Selenium method
         if not links:
-            print(f"[DEBUG] No links extracted via aiohttp for {url}. Falling back to Selenium.")
-            links = await asyncio.to_thread(fetch_links_with_selenium, url)
-            print(f"[DEBUG] Extracted links (Selenium): {links}")
+            print(f"[DEBUG] No links extracted via aiohttp for {url}. Falling back to persistent Selenium.")
+             links = await asyncio.to_thread(fetch_links_with_selenium, url)# Call the aliased function
+            print(f"[DEBUG] Extracted links (Persistent Selenium): {links}")
         
-        products = set()
-        new_links = set()
+        new_links: Set[str] = set()
+        products: Set[str] = set()
+        
         for link in links:
             if is_product_url(link):
                 products.add(link)

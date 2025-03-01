@@ -1,6 +1,7 @@
 import re
 
 PATTERNS = {
+     "wearenicerice.com": re.compile(r"/products/[\w-]+-\d+"),
     "www.myntra.com": re.compile(r"/\d+(?:/buy)?$"),
     "www2.hm.com": re.compile(r"/productpage\.\d+\.html$"),
     "www.nykaa.com": re.compile(r"/p/\d+\?productId=\d+"),
