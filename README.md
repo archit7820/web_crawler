@@ -190,5 +190,30 @@ After running the crawler, all discovered product URLs are saved in a JSON file 
 
 
 
+```python
+{
+  "urls": [
+     "https://www.nykaafashion.com",
+  ],
+  "max_depth": 2,
+  "concurrency": 10,
+  "output_filename": "products.json"
+}
+```
+
+**Output**
+
+---
+
+## Output
+
+After running the crawler, all discovered product URLs are saved in a JSON file named **`nyka_response.json`** located in the Fast API Section . You can download the file using the link below:
+
+[Download final_products.json](./nyka%20response.json)
+
+---
+
+
+
 
 

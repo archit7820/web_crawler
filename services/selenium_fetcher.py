@@ -1,153 +1,105 @@
+import time
+from urllib.parse import urlparse
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import TimeoutException, WebDriverException
-from urllib.parse import urljoin, urlparse
-import re
-import time
-from collections import deque
 
-class ProductCrawler:
-    def __init__(self, base_url, max_pages=50):
-        self.base_url = base_url
-        self.max_pages = max_pages
-        self.visited = set()
-        self.product_urls = set()
-        self.queue = deque()
-        self.queue.append(base_url)
-        
-        # Configure Chrome options
-        self.chrome_options = Options()
-        self.chrome_options.add_argument("--headless")
-        self.chrome_options.add_argument("--disable-gpu")
-        self.chrome_options.add_argument("--no-sandbox")
-        self.chrome_options.add_argument("--disable-extensions")
-        self.chrome_options.add_argument("--disable-infobars")
-        self.chrome_options.add_argument("--disable-notifications")
-        self.chrome_options.add_argument("--window-size=1920,1080")
-        self.chrome_options.add_argument("--user-agent=Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.114 Safari/537.36")
-        self.chrome_options.add_argument("--disable-dev-shm-usage")
-        
-        # Block unnecessary content
-        prefs = {
-            "profile.managed_default_content_settings.images": 2,
-            "profile.managed_default_content_settings.stylesheets": 2,
-            "profile.managed_default_content_settings.fonts": 2,
-            "profile.managed_default_content_settings.javascript": 1,  # Keep JS enabled for SPA
-            "profile.managed_default_content_settings.media_stream": 2,
-        }
-        self.chrome_options.add_experimental_option("prefs", prefs)
-
-    def is_product_url(self, url):
-        """Check if URL matches common product page patterns"""
-        patterns = [
-            r'/product/',
-            r'/p/',
-            r'/prod/',
-            r'\?product=',
-            r'/item/',
-            r'/shop/',
-            r'/buy/',
-            r'/detail/',
-            r'/\d+/$'  # Common for product IDs
-        ]
-        return any(re.search(pattern, url, re.I) for pattern in patterns)
-
-    def should_crawl(self, url):
-        """Determine if a URL is worth crawling"""
-        parsed = urlparse(url)
-        
-        # Skip if different domain
-        if parsed.netloc not in self.base_url:
-            return False
-            
-        # Skip non-http protocols
-        if not parsed.scheme.startswith('http'):
-            return False
-            
-        # Skip common non-product paths
-        skip_paths = {
-            '/contact', '/about', '/cart', '/checkout',
-            '/login', '/signup', '/account', '/admin',
-            '/privacy', '/terms', '/faq', '/help'
-        }
-        if any(path in parsed.path.lower() for path in skip_paths):
-            return False
-            
-        # Skip file extensions
-        skip_ext = {
-            '.pdf', '.jpg', '.jpeg', '.png', '.gif',
-            '.doc', '.docx', '.xls', '.xlsx', '.zip'
-        }
-        if any(parsed.path.lower().endswith(ext) for ext in skip_ext):
-            return False
-            
-        return True
-
-    def normalize_url(self, url):
-        """Normalize URL to avoid duplicate visits"""
-        parsed = urlparse(url)
-        path = parsed.path.rstrip('/')
-        return parsed.scheme + '://' + parsed.netloc + path
-
-    def crawl(self):
-        """Main crawling function"""
-        driver = webdriver.Chrome(options=self.chrome_options)
-        driver.set_page_load_timeout(30)
-        driver.set_script_timeout(20)
-        
+def fetch_links_with_selenium(url: str) -> set:
+    chrome_options = Options()
+    chrome_options.add_argument("--headless")  # Run headless (no UI)
+    chrome_options.add_argument("--disable-gpu")
+    chrome_options.add_argument("--no-sandbox")
+    chrome_options.add_argument("--disable-extensions")
+    chrome_options.add_argument("--disable-infobars")
+    chrome_options.add_argument("--disable-notifications")
+    chrome_options.add_argument("--window-size=1920,1080")
+    
+    # Block unnecessary content for performance.
+    # Note: javascript is set to 1 (enabled) since many pages require it.
+    prefs = {
+        "profile.managed_default_content_settings.images": 2,
+        "profile.managed_default_content_settings.stylesheets": 2,
+        "profile.managed_default_content_settings.fonts": 2,
+        "profile.managed_default_content_settings.javascript": 1,
+        "profile.managed_default_content_settings.media_stream": 2,
+    }
+    chrome_options.add_experimental_option("prefs", prefs)
+    
+    try:
+        driver = webdriver.Chrome(options=chrome_options)
+        driver.set_page_load_timeout(55)
+        driver.set_script_timeout(55)
+    except WebDriverException as e:
+        print(f"[DEBUG] Error initializing WebDriver: {e}")
+        return set()
+    
+    try:
+        driver.get(url)
+    except Exception as e:
+        print(f"[DEBUG] Exception during get(url) for {url}: {e}")
+    
+    try:
+        WebDriverWait(driver, 45).until(
+            EC.presence_of_element_located((By.TAG_NAME, "body"))
+        )
+    except TimeoutException as te:
+        print(f"[DEBUG] Timeout waiting for page to load in Selenium for {url}: {te}")
+        driver.quit()
+        return set()
+    except Exception as e:
+        print(f"[DEBUG] Exception waiting for page load for {url}: {e}")
+        driver.quit()
+        return set()
+    
+    # Scroll the page to load lazy-loaded content.
+    scroll_page(driver)
+    
+    try:
+        anchor_elements = driver.find_elements(By.TAG_NAME, "a")
+        raw_urls = {anchor.get_attribute("href") for anchor in anchor_elements if anchor.get_attribute("href")}
+    except Exception as e:
+        print(f"[DEBUG] Error extracting links for {url}: {e}")
+        raw_urls = set()
+    
+    driver.quit()
+    
+    # Filter URLs: skip paths and file extensions that are not required.
+    skip_paths = {'/contact', '/about', '/cart', '/checkout', '/login', '/signup', '/account', '/admin', '/privacy', '/terms', '/faq', '/help'}
+    skip_ext = {'.pdf', '.jpg', '.jpeg', '.png', '.gif', '.doc', '.docx', '.xls', '.xlsx', '.zip'}
+    filtered_urls = set()
+    
+    for link in raw_urls:
         try:
-            while self.queue and len(self.visited) < self.max_pages:
-                url = self.queue.popleft()
-                normalized = self.normalize_url(url)
-                
-                if normalized in self.visited:
-                    continue
-                
-                self.visited.add(normalized)
-                print(f"Crawling: {url}")
+            parsed = urlparse(link)
+            path_lower = parsed.path.lower()
+            # Skip if any unwanted path is found in the URL's path.
+            if any(skip in path_lower for skip in skip_paths):
+                continue
+            # Skip if URL ends with any unwanted file extension.
+            if any(path_lower.endswith(ext) for ext in skip_ext):
+                continue
+            filtered_urls.add(link)
+        except Exception as e:
+            # In case parsing fails, skip this URL.
+            continue
 
-                try:
-                    driver.get(url)
-                    # Wait for core content to load
-                    WebDriverWait(driver, 20).until(
-                        EC.presence_of_element_located((By.XPATH, '//body'))
-                    )
-                except (TimeoutException, WebDriverException) as e:
-                    print(f"Timeout loading {url}: {str(e)}")
-                    continue
+    return filtered_urls
 
-                # Check if current page is a product page
-                if self.is_product_url(url):
-                    self.product_urls.add(url)
-                    continue  # Don't crawl links from product pages
-
-                # Extract and process links
-                try:
-                    links = driver.find_elements(By.TAG_NAME, 'a')
-                    for link in links:
-                        href = link.get_attribute('href')
-                        if not href:
-                            continue
-
-                        full_url = urljoin(url, href).split('#')[0]
-                        norm_url = self.normalize_url(full_url)
-
-                        if self.is_product_url(full_url):
-                            self.product_urls.add(full_url)
-                        elif self.should_crawl(full_url) and norm_url not in self.visited:
-                            self.queue.append(full_url)
-
-                except WebDriverException as e:
-                    print(f"Error processing links: {str(e)}")
-
-                # Prioritize product-like URLs by reordering the queue
-                self.queue = deque(sorted(self.queue, key=lambda x: self.is_product_url(x), reverse=True))
-
-        finally:
-            driver.quit()
-
-        return self.product_urls
-
+def scroll_page(driver, scroll_pause_time=2, max_attempts=5):
+    """
+    Scrolls the page until no new content loads to reveal lazy-loaded elements.
+    """
+    last_height = driver.execute_script("return document.body.scrollHeight")
+    attempts = 0
+    while attempts < max_attempts:
+        driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
+        time.sleep(scroll_pause_time)
+        new_height = driver.execute_script("return document.body.scrollHeight")
+        if new_height == last_height:
+            attempts += 1
+        else:
+            attempts = 0
+        last_height = new_height
