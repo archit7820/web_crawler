@@ -74,8 +74,8 @@ The Async E-commerce Product URL Crawler is built to efficiently discover produc
 1. **Clone the Repository**
 
    ```bash
-   git clone https://github.com/yourusername/async-product-crawler.git
-   cd async-product-crawler
+   git clone https://github.com/archit7820/web_crawler.git
+   cd web_crawler
    ```
 
 2. **Install Dependencies**
@@ -105,10 +105,11 @@ import asyncio
 from services.crawler import crawl_urls  # Adjust the import based on your project structure
 
 urls = [
-    "example-ecommerce-site.com",
-    "another-ecommerce-site.com"
+    "https://wwww.myntra.com",
+    "https://www.nykaafashion.com/"
 ]
 max_depth = 3
+
 concurrency = 50
 
 async def main():
@@ -158,3 +159,36 @@ async def start_crawl(urls: list[str], max_depth: int = 3, concurrency: int = 50
    The final set of unique product URLs is saved to a JSON file and returned via the API or script.
 
 ---
+
+## Example 
+
+
+**Input** 
+
+```python
+{
+  "urls": [
+     "https://wwww.myntra.com",
+  ],
+  "max_depth": 2,
+  "concurrency": 50,
+  "output_filename": "products.json"
+}
+```
+
+**Output**
+
+---
+
+## Output
+
+After running the crawler, all discovered product URLs are saved in a JSON file named **`final_products.json`** located in the Fast API Section . You can download the file using the link below:
+
+[Download final_products.json](./Testing%20result.json)
+
+---
+
+
+
+
+
